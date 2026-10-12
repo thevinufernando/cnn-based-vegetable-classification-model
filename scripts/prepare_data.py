@@ -94,14 +94,15 @@ def load_split_file(split_file: Path, raw_dir: Path):
         if not path.is_file():
             missing.append(row["source"])
             continue
-        digest = md5_of(path)
-        if digest != row["md5"]:
-            mismatched.append(row["source"])
-            continue
+        if "md5" in row and row["md5"]:
+            digest = md5_of(path)
+            if digest != row["md5"]:
+                mismatched.append(row["source"])
+                continue
+            hashes[path] = digest
         if row["split"] not in splits:
             raise SystemExit(f"Unknown split '{row['split']}' in {split_file} ({row['source']}).")
         splits[row["split"]].append((path, row["class"]))
-        hashes[path] = digest
 
     if missing or mismatched:
         for name, items in (("missing", missing), ("different (MD5 mismatch)", mismatched)):
