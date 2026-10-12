@@ -1,6 +1,6 @@
 # Vegetable Classification with Lightweight CNNs
 
-A small image classifier that recognises 15 kinds of vegetables from low-resolution 64×64 images, built with the kind of hardware you'd find on an edge device in mind: a Raspberry Pi, a microcontroller, or a cheap camera node.
+A image classifier that recognises 15 kinds of vegetables from low-resolution 64×64 images, built with the kind of hardware you'd find on an edge device in mind: a Raspberry Pi, a microcontroller, or a cheap camera node.
 
 We compare two CNNs trained from scratch. One is a standard convolutional network. The other is a lightweight version built on depthwise-separable convolutions and kept under 100k parameters. We also fine-tune two pre-trained mobile architectures (MobileNetV2 and EfficientNet-B0) and look at how they all trade off accuracy, memory footprint and compute.
 
@@ -44,4 +44,21 @@ TensorFlow runs on the CPU on native Windows. At 64×64 that's perfectly workabl
 
 ## Contributors
 
-- [@thevinufernando](https://github.com/thevinufernando)
+- Thevinu Fernando ([@thevinufernando](https://github.com/thevinufernando))
+- Januka Sanujaya
+- Thisura Samuditha ([@ThisuraSamuditha](https://github.com/ThisuraSamuditha))
+- Chamod Dharmakeerthi ([@ChamodLD](https://github.com/ChamodLD))
+
+## References
+
+1. M. I. Ahmed, S. M. Mamun and A. U. Z. Asif, "DCNN-Based Vegetable Image Classification Using Transfer Learning: A Comparative Study," *5th International Conference on Computer, Communication and Signal Processing (ICCCSP)*, 2021.
+2. Y. LeCun, L. Bottou, Y. Bengio and P. Haffner, "Gradient-Based Learning Applied to Document Recognition," *Proceedings of the IEEE*, vol. 86, no. 11, pp. 2278–2324, 1998.
+3. F. Chollet, "Xception: Deep Learning with Depthwise Separable Convolutions," *CVPR*, 2017.
+4. A. G. Howard et al., "MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications," arXiv:1704.04861, 2017.
+5. M. Sandler, A. Howard, M. Zhu, A. Zhmoginov and L.-C. Chen, "MobileNetV2: Inverted Residuals and Linear Bottlenecks," *CVPR*, 2018.
+6. M. Tan and Q. V. Le, "EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks," *ICML*, 2019.
+7. K. P. Murphy, *Probabilistic Machine Learning: An Introduction*, MIT Press, 2022.
+
+## License
+
+Released under the [MIT License](LICENSE).
