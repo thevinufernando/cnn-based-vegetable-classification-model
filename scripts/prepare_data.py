@@ -1,24 +1,30 @@
 """
 Prepare the vegetable dataset for the resource-constrained CNN assignment.
 
+The Kaggle dataset already ships with a train / validation / test split that its
+author describes as 70% / 15% / 15% (data/raw/.../{train,validation,test}/<Class>/).
+
 Steps
 -----
-1. Collect every image under data/raw (ignoring Kaggle's original
-   train/validation/test split). The class label is the image's parent folder.
-2. Drop exact duplicate files (MD5 hash) so the same image can never end up
-   in two splits (data leakage).
-3. Stratified split into 70% train / 15% validation / 15% test, so every
-   class keeps the same proportion in each split.
+1. Collect every image under data/raw. The class label is the image's parent
+   folder and the original split is the grand-parent folder.
+2. Drop exact duplicate files (MD5 hash) so the same image can never appear
+   in two splits (data leakage). The copy in the earliest split
+   (train -> val -> test) is kept.
+3. Assign splits, depending on --split-mode:
+     original (default) : keep Kaggle's provided train/validation/test split
+     resplit            : ignore it and make a fresh stratified 70/15/15 split
 4. Downscale every image to 64x64 RGB (emulates a low-resolution edge sensor)
    and save it as a lossless PNG in:
        data/processed/{train,val,test}/<ClassName>/<image>.png
 5. Write data/processed/split_manifest.csv (source path, class, split) so the
-   exact same split can be audited / reproduced later.
+   exact split can be audited / reproduced later, and print the per-class
+   counts and actual split percentages (report these numbers).
 
 Usage (from the project root):
-    python scripts/prepare_data.py
-    python scripts/prepare_data.py --overwrite          # rebuild data/processed
-    python scripts/prepare_data.py --size 48 --seed 7   # other options
+    python scripts/prepare_data.py                         # keep Kaggle's split
+    python scripts/prepare_data.py --split-mode resplit    # exact 70/15/15 re-split
+    python scripts/prepare_data.py --overwrite             # rebuild data/processed
 """
 
 import argparse
@@ -38,28 +44,57 @@ DEFAULT_OUT_DIR = ROOT / "data" / "processed"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 SPLITS = ("train", "val", "test")
 
+# Map the folder names used by Kaggle to our split names
+SPLIT_ALIASES = {
+    "train": "train", "training": "train",
+    "validation": "val", "valid": "val", "val": "val",
+    "test": "test", "testing": "test",
+}
 
-def collect_images(raw_dir: Path) -> tuple[list[Path], list[str], int]:
-    """Return image paths, their class labels and the number of duplicates removed."""
-    paths = sorted(p for p in raw_dir.rglob("*") if p.suffix.lower() in IMAGE_EXTENSIONS)
+
+def original_split_of(path: Path) -> str | None:
+    """Original split from the folder layout .../<split>/<Class>/<image>, or None."""
+    return SPLIT_ALIASES.get(path.parent.parent.name.lower())
+
+
+def collect_images(raw_dir: Path) -> tuple[list[tuple[Path, str, str | None]], int]:
+    """Return (path, class_label, original_split) records and the number of duplicates removed."""
+    paths = [p for p in raw_dir.rglob("*") if p.suffix.lower() in IMAGE_EXTENSIONS]
     if not paths:
         raise SystemExit(f"No images found under {raw_dir}. Run scripts/download_data.py first.")
 
+    # Visit train first, then val, then test, so a duplicate is kept in the earliest split
+    split_rank = {name: i for i, name in enumerate(SPLITS)}
+    paths.sort(key=lambda p: (split_rank.get(original_split_of(p), len(SPLITS)), str(p)))
+
     seen_hashes = set()
-    unique_paths, labels = [], []
+    records = []
     for path in tqdm(paths, desc="Scanning images"):
         digest = hashlib.md5(path.read_bytes()).hexdigest()
         if digest in seen_hashes:
             continue  # identical file already collected
         seen_hashes.add(digest)
-        unique_paths.append(path)
-        labels.append(path.parent.name)  # e.g. .../train/Broccoli/0001.jpg -> "Broccoli"
+        # e.g. .../train/Broccoli/0001.jpg -> ("Broccoli", "train")
+        records.append((path, path.parent.name, original_split_of(path)))
 
-    return unique_paths, labels, len(paths) - len(unique_paths)
+    return records, len(paths) - len(records)
 
 
-def split_dataset(paths, labels, seed):
-    """Stratified 70/15/15 split -> dict {split_name: [(path, label), ...]}."""
+def split_original(records):
+    """Keep the split provided with the dataset -> {split_name: [(path, label), ...]}."""
+    unknown = [p for p, _, split in records if split is None]
+    if unknown:
+        raise SystemExit(
+            f"{len(unknown)} images are not inside a train/validation/test folder "
+            f"(e.g. {unknown[0]}). Use --split-mode resplit instead."
+        )
+    return {s: [(p, label) for p, label, split in records if split == s] for s in SPLITS}
+
+
+def split_stratified(records, seed):
+    """Fresh stratified 70/15/15 split -> {split_name: [(path, label), ...]}."""
+    paths = [p for p, _, _ in records]
+    labels = [label for _, label, _ in records]
     # 70% train, 30% temporary pool
     train_p, temp_p, train_y, temp_y = train_test_split(
         paths, labels, test_size=0.30, stratify=labels, random_state=seed
@@ -75,12 +110,10 @@ def split_dataset(paths, labels, seed):
     }
 
 
-def output_name(src: Path, raw_dir: Path) -> str:
-    """Unique PNG file name built from the source path (original split + file stem),
-    because Kaggle's train/validation/test folders may reuse the same file names."""
-    rel_parts = src.relative_to(raw_dir).parts
-    original_split = rel_parts[-3] if len(rel_parts) >= 3 else "img"
-    return f"{original_split}_{src.stem}.png"
+def output_name(src: Path) -> str:
+    """Unique PNG file name (original split + file stem), because Kaggle's
+    train/validation/test folders may reuse the same file names."""
+    return f"{original_split_of(src) or 'img'}_{src.stem}.png"
 
 
 def resize_and_save(src: Path, dst: Path, size: int) -> None:
@@ -92,11 +125,13 @@ def resize_and_save(src: Path, dst: Path, size: int) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Re-split and downscale the vegetable dataset.")
+    parser = argparse.ArgumentParser(description="Split and downscale the vegetable dataset.")
     parser.add_argument("--raw-dir", type=Path, default=DEFAULT_RAW_DIR)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
+    parser.add_argument("--split-mode", choices=["original", "resplit"], default="original",
+                        help="keep Kaggle's split (default) or make a new stratified 70/15/15 split")
     parser.add_argument("--size", type=int, default=64, help="output resolution (max 64)")
-    parser.add_argument("--seed", type=int, default=42, help="random seed for the split")
+    parser.add_argument("--seed", type=int, default=42, help="random seed (resplit mode only)")
     parser.add_argument("--overwrite", action="store_true", help="delete existing out-dir first")
     args = parser.parse_args()
 
@@ -110,15 +145,19 @@ def main():
         shutil.rmtree(out_dir)
 
     # 1-2. Collect + de-duplicate
-    paths, labels, n_duplicates = collect_images(raw_dir)
-    classes = sorted(set(labels))
-    print(f"Found {len(paths):,} unique images in {len(classes)} classes "
+    records, n_duplicates = collect_images(raw_dir)
+    classes = sorted({label for _, label, _ in records})
+    print(f"Found {len(records):,} unique images in {len(classes)} classes "
           f"({n_duplicates} duplicates removed).")
     if len(classes) != 15:
         print(f"WARNING: expected 15 classes, found {len(classes)}: {classes}")
 
-    # 3. Stratified split
-    splits = split_dataset(paths, labels, args.seed)
+    # 3. Assign splits
+    if args.split_mode == "original":
+        splits = split_original(records)
+    else:
+        splits = split_stratified(records, args.seed)
+    print(f"Split mode: {args.split_mode}")
 
     # 4. Resize + save, 5. manifest
     manifest_rows = []
@@ -126,7 +165,7 @@ def main():
         for cls in classes:
             (out_dir / split / cls).mkdir(parents=True, exist_ok=True)
         for src, label in tqdm(splits[split], desc=f"Writing {split}"):
-            dst = out_dir / split / label / output_name(src, raw_dir)
+            dst = out_dir / split / label / output_name(src)
             resize_and_save(src, dst, args.size)
             manifest_rows.append(
                 {"source": src.relative_to(raw_dir).as_posix(), "class": label,
@@ -138,14 +177,14 @@ def main():
         writer.writeheader()
         writer.writerows(manifest_rows)
 
-    # Summary table: images per class per split
+    # Summary table: images per class per split + actual split percentages
     counts = {split: Counter(label for _, label in splits[split]) for split in SPLITS}
-    total = len(paths)
+    total = len(records)
     print(f"\n{'Class':<15}" + "".join(f"{s:>8}" for s in SPLITS))
     for cls in classes:
         print(f"{cls:<15}" + "".join(f"{counts[s][cls]:>8}" for s in SPLITS))
     print(f"{'TOTAL':<15}" + "".join(f"{len(splits[s]):>8}" for s in SPLITS))
-    print("Share          " + "".join(f"{len(splits[s]) / total:>8.1%}" for s in SPLITS))
+    print(f"{'Share':<15}" + "".join(f"{len(splits[s]) / total:>8.1%}" for s in SPLITS))
     print(f"\nSaved {args.size}x{args.size} PNGs to {out_dir}")
 
 
