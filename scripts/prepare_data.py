@@ -1,30 +1,38 @@
 """
 Prepare the vegetable dataset for the resource-constrained CNN assignment.
 
-The Kaggle dataset already ships with a train / validation / test split that its
-author describes as 70% / 15% / 15% (data/raw/.../{train,validation,test}/<Class>/).
+The whole group must train and evaluate on the SAME images in each split, so the
+split is stored in the version-controlled file `splits.csv` (project root):
 
-Steps
------
-1. Collect every image under data/raw. The class label is the image's parent
-   folder and the original split is the grand-parent folder.
-2. Drop exact duplicate files (MD5 hash) so the same image can never appear
-   in two splits (data leakage). The copy in the earliest split
-   (train -> val -> test) is kept.
-3. Assign splits, depending on --split-mode:
-     original (default) : keep Kaggle's provided train/validation/test split
-     resplit            : ignore it and make a fresh stratified 70/15/15 split
-4. Downscale every image to 64x64 RGB (emulates a low-resolution edge sensor)
-   and save it as a lossless PNG in:
-       data/processed/{train,val,test}/<ClassName>/<image>.png
-5. Write data/processed/split_manifest.csv (source path, class, split) so the
-   exact split can be audited / reproduced later, and print the per-class
-   counts and actual split percentages (report these numbers).
+    source,class,split,md5
+    Vegetable Images/train/Bean/0001.jpg,Bean,train,3f2a...
+
+`source` is relative to data/raw and `md5` is the hash of the original image,
+so the script can verify that everyone downloaded identical files.
+
+Split modes (--split-mode)
+--------------------------
+file (default) : rebuild data/processed exactly as listed in splits.csv
+                 (every image is checked against its MD5 hash first).
+original       : collect all images under data/raw, drop exact duplicates
+                 (MD5), and keep Kaggle's provided train/validation/test split
+                 (described by the dataset author as 70/15/15).
+resplit        : like `original`, but make a fresh stratified 70/15/15 split.
+
+`original` / `resplit` only write a new splits.csv when --save-split-file is
+given. Do that once, commit splits.csv, and everyone else uses `file` mode.
+
+Output
+------
+- 64x64 RGB PNGs (emulates a low-resolution edge sensor) in
+      data/processed/{train,val,test}/<ClassName>/<image>.png
+- data/processed/split_manifest.csv : source -> output file mapping
+- per-class counts and the actual split percentages (report these numbers)
 
 Usage (from the project root):
-    python scripts/prepare_data.py                         # keep Kaggle's split
-    python scripts/prepare_data.py --split-mode resplit    # exact 70/15/15 re-split
-    python scripts/prepare_data.py --overwrite             # rebuild data/processed
+    python scripts/prepare_data.py                     # rebuild from splits.csv
+    python scripts/prepare_data.py --overwrite         # ... replacing data/processed
+    python scripts/prepare_data.py --split-mode original --save-split-file   # (re)create splits.csv
 """
 
 import argparse
@@ -41,8 +49,10 @@ from tqdm import tqdm
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RAW_DIR = ROOT / "data" / "raw"
 DEFAULT_OUT_DIR = ROOT / "data" / "processed"
+DEFAULT_SPLIT_FILE = ROOT / "splits.csv"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 SPLITS = ("train", "val", "test")
+SPLIT_FILE_FIELDS = ["source", "class", "split", "md5"]
 
 # Map the folder names used by Kaggle to our split names
 SPLIT_ALIASES = {
@@ -52,13 +62,64 @@ SPLIT_ALIASES = {
 }
 
 
+def md5_of(path: Path) -> str:
+    """MD5 hash of a file's bytes (identifies identical images)."""
+    return hashlib.md5(path.read_bytes()).hexdigest()
+
+
 def original_split_of(path: Path) -> str | None:
     """Original split from the folder layout .../<split>/<Class>/<image>, or None."""
     return SPLIT_ALIASES.get(path.parent.parent.name.lower())
 
 
-def collect_images(raw_dir: Path) -> tuple[list[tuple[Path, str, str | None]], int]:
-    """Return (path, class_label, original_split) records and the number of duplicates removed."""
+# --------------------------------------------------------------------------
+# Mode "file": read the shared split
+# --------------------------------------------------------------------------
+def load_split_file(split_file: Path, raw_dir: Path):
+    """Read splits.csv -> ({split: [(path, label), ...]}, {path: md5}).
+    Stops with an error if any listed image is missing or differs from the group's copy."""
+    if not split_file.is_file():
+        raise SystemExit(
+            f"{split_file} not found. Pull it from the repository, or create it once with:\n"
+            "  python scripts/prepare_data.py --split-mode original --save-split-file"
+        )
+
+    with open(split_file, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    splits = {s: [] for s in SPLITS}
+    hashes, missing, mismatched = {}, [], []
+    for row in tqdm(rows, desc="Verifying images"):
+        path = raw_dir / row["source"]
+        if not path.is_file():
+            missing.append(row["source"])
+            continue
+        digest = md5_of(path)
+        if digest != row["md5"]:
+            mismatched.append(row["source"])
+            continue
+        if row["split"] not in splits:
+            raise SystemExit(f"Unknown split '{row['split']}' in {split_file} ({row['source']}).")
+        splits[row["split"]].append((path, row["class"]))
+        hashes[path] = digest
+
+    if missing or mismatched:
+        for name, items in (("missing", missing), ("different (MD5 mismatch)", mismatched)):
+            if items:
+                print(f"{len(items)} images {name}, e.g. {items[:3]}")
+        raise SystemExit(
+            "Your data/raw does not match splits.csv. Re-download the dataset with:\n"
+            "  python scripts/download_data.py --force"
+        )
+    return splits, hashes
+
+
+# --------------------------------------------------------------------------
+# Modes "original" / "resplit": build a split from data/raw
+# --------------------------------------------------------------------------
+def collect_images(raw_dir: Path):
+    """Return (path, class_label, original_split) records, {path: md5} and the
+    number of duplicates removed."""
     paths = [p for p in raw_dir.rglob("*") if p.suffix.lower() in IMAGE_EXTENSIONS]
     if not paths:
         raise SystemExit(f"No images found under {raw_dir}. Run scripts/download_data.py first.")
@@ -67,17 +128,18 @@ def collect_images(raw_dir: Path) -> tuple[list[tuple[Path, str, str | None]], i
     split_rank = {name: i for i, name in enumerate(SPLITS)}
     paths.sort(key=lambda p: (split_rank.get(original_split_of(p), len(SPLITS)), str(p)))
 
+    hashes, records = {}, []
     seen_hashes = set()
-    records = []
     for path in tqdm(paths, desc="Scanning images"):
-        digest = hashlib.md5(path.read_bytes()).hexdigest()
+        digest = md5_of(path)
         if digest in seen_hashes:
             continue  # identical file already collected
         seen_hashes.add(digest)
+        hashes[path] = digest
         # e.g. .../train/Broccoli/0001.jpg -> ("Broccoli", "train")
         records.append((path, path.parent.name, original_split_of(path)))
 
-    return records, len(paths) - len(records)
+    return records, hashes, len(paths) - len(records)
 
 
 def split_original(records):
@@ -110,6 +172,24 @@ def split_stratified(records, seed):
     }
 
 
+def save_split_file(splits, hashes, raw_dir: Path, split_file: Path) -> None:
+    """Write the split to splits.csv (sorted, with POSIX paths so it is identical on every OS)."""
+    rows = [
+        {"source": path.relative_to(raw_dir).as_posix(), "class": label,
+         "split": split, "md5": hashes[path]}
+        for split in SPLITS for path, label in splits[split]
+    ]
+    rows.sort(key=lambda r: (SPLITS.index(r["split"]), r["class"], r["source"]))
+    with open(split_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=SPLIT_FILE_FIELDS, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"Saved the split to {split_file}. Commit it so the whole group uses it.")
+
+
+# --------------------------------------------------------------------------
+# Image processing
+# --------------------------------------------------------------------------
 def output_name(src: Path) -> str:
     """Unique PNG file name (original split + file stem), because Kaggle's
     train/validation/test folders may reuse the same file names."""
@@ -128,8 +208,12 @@ def main():
     parser = argparse.ArgumentParser(description="Split and downscale the vegetable dataset.")
     parser.add_argument("--raw-dir", type=Path, default=DEFAULT_RAW_DIR)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
-    parser.add_argument("--split-mode", choices=["original", "resplit"], default="original",
-                        help="keep Kaggle's split (default) or make a new stratified 70/15/15 split")
+    parser.add_argument("--split-file", type=Path, default=DEFAULT_SPLIT_FILE)
+    parser.add_argument("--split-mode", choices=["file", "original", "resplit"], default="file",
+                        help="use the shared splits.csv (default), Kaggle's split, "
+                             "or a new stratified 70/15/15 split")
+    parser.add_argument("--save-split-file", action="store_true",
+                        help="(original/resplit modes) write the new split to --split-file")
     parser.add_argument("--size", type=int, default=64, help="output resolution (max 64)")
     parser.add_argument("--seed", type=int, default=42, help="random seed (resplit mode only)")
     parser.add_argument("--overwrite", action="store_true", help="delete existing out-dir first")
@@ -137,29 +221,36 @@ def main():
 
     if args.size > 64:
         raise SystemExit("The assignment caps the resolution at 64x64.")
+    if args.save_split_file and args.split_mode == "file":
+        raise SystemExit("--save-split-file only applies to --split-mode original/resplit.")
 
     raw_dir, out_dir = args.raw_dir.resolve(), args.out_dir.resolve()
+    split_file = args.split_file.resolve()
     if out_dir.exists() and any(out_dir.iterdir()):
         if not args.overwrite:
             raise SystemExit(f"{out_dir} is not empty. Re-run with --overwrite to rebuild it.")
         shutil.rmtree(out_dir)
 
-    # 1-2. Collect + de-duplicate
-    records, n_duplicates = collect_images(raw_dir)
-    classes = sorted({label for _, label, _ in records})
-    print(f"Found {len(records):,} unique images in {len(classes)} classes "
-          f"({n_duplicates} duplicates removed).")
+    # 1. Decide which image goes to which split
+    if args.split_mode == "file":
+        splits, hashes = load_split_file(split_file, raw_dir)
+        print(f"Using the shared split from {split_file}")
+    else:
+        records, hashes, n_duplicates = collect_images(raw_dir)
+        print(f"Found {len(records):,} unique images ({n_duplicates} duplicates removed).")
+        if args.split_mode == "original":
+            splits = split_original(records)
+        else:
+            splits = split_stratified(records, args.seed)
+        print(f"Split mode: {args.split_mode}")
+        if args.save_split_file:
+            save_split_file(splits, hashes, raw_dir, split_file)
+
+    classes = sorted({label for items in splits.values() for _, label in items})
     if len(classes) != 15:
         print(f"WARNING: expected 15 classes, found {len(classes)}: {classes}")
 
-    # 3. Assign splits
-    if args.split_mode == "original":
-        splits = split_original(records)
-    else:
-        splits = split_stratified(records, args.seed)
-    print(f"Split mode: {args.split_mode}")
-
-    # 4. Resize + save, 5. manifest
+    # 2. Resize + save, and record where every image went
     manifest_rows = []
     for split in SPLITS:
         for cls in classes:
@@ -177,9 +268,9 @@ def main():
         writer.writeheader()
         writer.writerows(manifest_rows)
 
-    # Summary table: images per class per split + actual split percentages
+    # 3. Summary table: images per class per split + actual split percentages
     counts = {split: Counter(label for _, label in splits[split]) for split in SPLITS}
-    total = len(records)
+    total = sum(len(items) for items in splits.values())
     print(f"\n{'Class':<15}" + "".join(f"{s:>8}" for s in SPLITS))
     for cls in classes:
         print(f"{cls:<15}" + "".join(f"{counts[s][cls]:>8}" for s in SPLITS))
