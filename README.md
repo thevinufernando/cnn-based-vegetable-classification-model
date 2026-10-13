@@ -45,7 +45,7 @@ TensorFlow runs on the CPU on native Windows. At 64×64 that's perfectly workabl
 ## Contributors
 
 - Thevinu Fernando ([@thevinufernando](https://github.com/thevinufernando))
-- Januka Sanujaya
+- Januka Sanujaya ([@Januka-Sanujaya](https://github.com/Januka-Sanujaya))
 - Thisura Samuditha ([@ThisuraSamuditha](https://github.com/ThisuraSamuditha))
 - Chamod Dharmakeerthi ([@ChamodLD](https://github.com/ChamodLD))
 
