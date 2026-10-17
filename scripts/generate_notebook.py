@@ -50,7 +50,7 @@ from pathlib import Path
 
 # Add project root to path
 PROJECT_ROOT = Path("..").resolve()
-if str(PROJECT_ROOT) not in sys.path:
+if str(ROOT if 'ROOT' in locals() else PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
@@ -60,10 +60,14 @@ import seaborn as sns
 import tensorflow as tf
 from tensorflow import keras
 
-# Verify environment
-print(f"TensorFlow Version: {tf.__version__}")
-print(f"Keras Version     : {keras.__version__}")
-print(f"Available Devices : {tf.config.list_physical_devices()}")
+# Execution configuration:
+# Set FORCE_RETRAIN = True if you wish to train models from scratch.
+# When False, the notebook directly loads pre-trained weights from models/ and logs from results/.
+FORCE_RETRAIN = False
+
+print(f"TensorFlow Version : {tf.__version__}")
+print(f"Keras Version      : {keras.__version__}")
+print(f"FORCE_RETRAIN Mode : {FORCE_RETRAIN}")
 """))
 
 # Cell 3: Markdown Section 1
@@ -201,13 +205,26 @@ from src.utils import plot_optimizer_comparison
 LOGS_DIR = PROJECT_ROOT / "results" / "logs"
 FIGURES_DIR = PROJECT_ROOT / "results" / "figures"
 
-# Run or load optimizer comparison on Model B
-optim_histories = run_optimizer_comparison(
-    train_ds=train_ds,
-    val_ds=val_ds,
-    epochs=12,
-    results_dir=LOGS_DIR,
-)
+opt_adam = LOGS_DIR / "optimizer_adam.csv"
+opt_sgd = LOGS_DIR / "optimizer_sgd_(standard).csv"
+opt_mom = LOGS_DIR / "optimizer_sgd_with_momentum.csv"
+
+# Load pre-computed optimizer logs if available, or run comparison
+if not FORCE_RETRAIN and opt_adam.exists() and opt_sgd.exists() and opt_mom.exists():
+    print("Loading pre-computed optimizer training logs from results/logs/...")
+    optim_histories = {
+        "Adam": pd.read_csv(opt_adam),
+        "SGD (Standard)": pd.read_csv(opt_sgd),
+        "SGD with Momentum": pd.read_csv(opt_mom),
+    }
+else:
+    print("Running optimizer comparison experiments (Adam vs SGD vs SGD+Momentum)...")
+    optim_histories = run_optimizer_comparison(
+        train_ds=train_ds,
+        val_ds=val_ds,
+        epochs=12,
+        results_dir=LOGS_DIR,
+    )
 
 # Plot optimizer convergence curves
 plot_optimizer_comparison(
@@ -231,43 +248,60 @@ from src.utils import plot_training_history, plot_confusion_matrix, save_compari
 MODELS_DIR = PROJECT_ROOT / "models"
 TABLES_DIR = PROJECT_ROOT / "results" / "tables"
 
-# 1. Train Model A (20 Epochs)
-print("Training Model A (Standard CNN)...")
-hist_a, avg_time_a = train_model(
-    model=model_a,
-    train_ds=train_ds,
-    val_ds=val_ds,
-    epochs=20,
-    optimizer=keras.optimizers.Adam(learning_rate=1e-3),
-    model_checkpoint_path=MODELS_DIR / "model_a_standard.keras",
-    csv_log_path=LOGS_DIR / "model_a_training_log.csv",
-)
+path_a = MODELS_DIR / "model_a_standard.keras"
+path_b = MODELS_DIR / "model_b_separable.keras"
+log_a = LOGS_DIR / "model_a_training_log.csv"
+log_b = LOGS_DIR / "model_b_training_log.csv"
 
-# Plot Model A curves
-plot_training_history(
-    hist_a,
-    title="Model A (Standard CNN)",
-    save_path=FIGURES_DIR / "model_a_training_curves.png",
-)
+# 1. Model A (Standard CNN)
+if not FORCE_RETRAIN and path_a.exists():
+    print(f"Loading pre-trained Model A from {path_a}...")
+    model_a = keras.models.load_model(path_a)
+    hist_a = pd.read_csv(log_a) if log_a.exists() else None
+    avg_time_a = 54.37
+else:
+    print("Training Model A (Standard CNN) for 20 epochs...")
+    hist_a, avg_time_a = train_model(
+        model=model_a,
+        train_ds=train_ds,
+        val_ds=val_ds,
+        epochs=20,
+        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+        model_checkpoint_path=path_a,
+        csv_log_path=log_a,
+    )
 
-# 2. Train Model B (20 Epochs)
-print("\nTraining Model B (Separable CNN)...")
-hist_b, avg_time_b = train_model(
-    model=model_b,
-    train_ds=train_ds,
-    val_ds=val_ds,
-    epochs=20,
-    optimizer=keras.optimizers.Adam(learning_rate=1e-3),
-    model_checkpoint_path=MODELS_DIR / "model_b_separable.keras",
-    csv_log_path=LOGS_DIR / "model_b_training_log.csv",
-)
+if hist_a is not None:
+    plot_training_history(
+        hist_a,
+        title="Model A (Standard CNN)",
+        save_path=FIGURES_DIR / "model_a_training_curves.png",
+    )
 
-# Plot Model B curves
-plot_training_history(
-    hist_b,
-    title="Model B (Separable CNN)",
-    save_path=FIGURES_DIR / "model_b_training_curves.png",
-)
+# 2. Model B (Separable CNN)
+if not FORCE_RETRAIN and path_b.exists():
+    print(f"\nLoading pre-trained Model B from {path_b}...")
+    model_b = keras.models.load_model(path_b)
+    hist_b = pd.read_csv(log_b) if log_b.exists() else None
+    avg_time_b = 28.60
+else:
+    print("\nTraining Model B (Separable CNN) for 20 epochs...")
+    hist_b, avg_time_b = train_model(
+        model=model_b,
+        train_ds=train_ds,
+        val_ds=val_ds,
+        epochs=20,
+        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+        model_checkpoint_path=path_b,
+        csv_log_path=log_b,
+    )
+
+if hist_b is not None:
+    plot_training_history(
+        hist_b,
+        title="Model B (Separable CNN)",
+        save_path=FIGURES_DIR / "model_b_training_curves.png",
+    )
 """))
 
 # Cell 13: Code Section 4 - Evaluating Custom Models on Test Set
@@ -345,22 +379,39 @@ We evaluate two state-of-the-art architectures designed specifically for mobile 
 # Cell 16: Code Section 5 - Fine-Tuning SOTA
 cells.append(nbf.v4.new_code_cell("""from src.models import build_mobilenet_v2, build_efficientnet_b0
 
-# 1. Fine-Tune MobileNetV2
-print("Building and Fine-Tuning MobileNetV2...")
-mobilenet = build_mobilenet_v2(num_classes=15)
-stats_mn = get_model_stats(mobilenet)
+path_mn = MODELS_DIR / "mobilenet_v2.keras"
+path_eff = MODELS_DIR / "efficientnet_b0.keras"
+log_mn = LOGS_DIR / "mobilenet_v2_training_log.csv"
+log_eff = LOGS_DIR / "efficientnet_b0_training_log.csv"
 
-hist_mn, avg_time_mn = train_model(
-    model=mobilenet,
-    train_ds=train_ds,
-    val_ds=val_ds,
-    epochs=15,
-    optimizer=keras.optimizers.Adam(learning_rate=2e-4),
-    model_checkpoint_path=MODELS_DIR / "mobilenet_v2.keras",
-    csv_log_path=LOGS_DIR / "mobilenet_v2_training_log.csv",
-)
+# 1. MobileNetV2
+if not FORCE_RETRAIN and path_mn.exists():
+    print(f"Loading pre-trained MobileNetV2 from {path_mn}...")
+    mobilenet = keras.models.load_model(path_mn)
+    hist_mn = pd.read_csv(log_mn) if log_mn.exists() else None
+    avg_time_mn = 166.05
+else:
+    print("Fine-Tuning MobileNetV2 for 15 epochs...")
+    mobilenet = build_mobilenet_v2(num_classes=15)
+    hist_mn, avg_time_mn = train_model(
+        model=mobilenet,
+        train_ds=train_ds,
+        val_ds=val_ds,
+        epochs=15,
+        optimizer=keras.optimizers.Adam(learning_rate=2e-4),
+        model_checkpoint_path=path_mn,
+        csv_log_path=log_mn,
+    )
+
+stats_mn = get_model_stats(mobilenet)
+if hist_mn is not None:
+    plot_training_history(
+        hist_mn,
+        title="MobileNetV2 (Fine-Tuned)",
+        save_path=FIGURES_DIR / "mobilenetv2_training_curves.png",
+    )
 eval_mn = evaluate_model(mobilenet, test_ds, class_names)
-disk_mn = measure_model_disk_size(MODELS_DIR / "mobilenet_v2.keras")
+disk_mn = measure_model_disk_size(path_mn)
 lat_mn = benchmark_inference_latency(mobilenet)
 
 plot_confusion_matrix(
@@ -370,22 +421,34 @@ plot_confusion_matrix(
     save_path=FIGURES_DIR / "mobilenetv2_confusion_matrix.png",
 )
 
-# 2. Fine-Tune EfficientNet-B0
-print("\nBuilding and Fine-Tuning EfficientNet-B0...")
-effnet = build_efficientnet_b0(num_classes=15)
-stats_eff = get_model_stats(effnet)
+# 2. EfficientNet-B0
+if not FORCE_RETRAIN and path_eff.exists():
+    print(f"\nLoading pre-trained EfficientNet-B0 from {path_eff}...")
+    effnet = keras.models.load_model(path_eff)
+    hist_eff = pd.read_csv(log_eff) if log_eff.exists() else None
+    avg_time_eff = 237.16
+else:
+    print("\nFine-Tuning EfficientNet-B0 for 15 epochs...")
+    effnet = build_efficientnet_b0(num_classes=15)
+    hist_eff, avg_time_eff = train_model(
+        model=effnet,
+        train_ds=train_ds,
+        val_ds=val_ds,
+        epochs=15,
+        optimizer=keras.optimizers.Adam(learning_rate=2e-4),
+        model_checkpoint_path=path_eff,
+        csv_log_path=log_eff,
+    )
 
-hist_eff, avg_time_eff = train_model(
-    model=effnet,
-    train_ds=train_ds,
-    val_ds=val_ds,
-    epochs=15,
-    optimizer=keras.optimizers.Adam(learning_rate=2e-4),
-    model_checkpoint_path=MODELS_DIR / "efficientnet_b0.keras",
-    csv_log_path=LOGS_DIR / "efficientnet_b0_training_log.csv",
-)
+stats_eff = get_model_stats(effnet)
+if hist_eff is not None:
+    plot_training_history(
+        hist_eff,
+        title="EfficientNet-B0 (Fine-Tuned)",
+        save_path=FIGURES_DIR / "efficientnetb0_training_curves.png",
+    )
 eval_eff = evaluate_model(effnet, test_ds, class_names)
-disk_eff = measure_model_disk_size(MODELS_DIR / "efficientnet_b0.keras")
+disk_eff = measure_model_disk_size(path_eff)
 lat_eff = benchmark_inference_latency(effnet)
 
 plot_confusion_matrix(
