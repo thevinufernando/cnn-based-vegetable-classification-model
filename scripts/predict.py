@@ -1,12 +1,3 @@
-"""
-Inference script to classify any single vegetable image or folder of images.
-
-Usage:
-    python scripts/predict.py --image "data/processed/test/Tomato/test_0001.png" --model b
-    python scripts/predict.py --image "path/to/any_vegetable.jpg" --model a
-    python scripts/predict.py --image "path/to/any_vegetable.jpg" --model mobilenet
-"""
-
 import argparse
 import sys
 import time

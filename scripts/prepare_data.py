@@ -1,40 +1,3 @@
-"""
-Prepare the vegetable dataset for the resource-constrained CNN assignment.
-
-The whole group must train and evaluate on the SAME images in each split, so the
-split is stored in the version-controlled file `splits.csv` (project root):
-
-    source,class,split,md5
-    Vegetable Images/train/Bean/0001.jpg,Bean,train,3f2a...
-
-`source` is relative to data/raw and `md5` is the hash of the original image,
-so the script can verify that everyone downloaded identical files.
-
-Split modes (--split-mode)
---------------------------
-file (default) : rebuild data/processed exactly as listed in splits.csv
-                 (every image is checked against its MD5 hash first).
-original       : collect all images under data/raw, drop exact duplicates
-                 (MD5), and keep Kaggle's provided train/validation/test split
-                 (described by the dataset author as 70/15/15).
-resplit        : like `original`, but make a fresh stratified 70/15/15 split.
-
-`original` / `resplit` only write a new splits.csv when --save-split-file is
-given. Do that once, commit splits.csv, and everyone else uses `file` mode.
-
-Output
-------
-- 64x64 RGB PNGs (emulates a low-resolution edge sensor) in
-      data/processed/{train,val,test}/<ClassName>/<image>.png
-- data/processed/split_manifest.csv : source -> output file mapping
-- per-class counts and the actual split percentages (report these numbers)
-
-Usage (from the project root):
-    python scripts/prepare_data.py                     # rebuild from splits.csv
-    python scripts/prepare_data.py --overwrite         # ... replacing data/processed
-    python scripts/prepare_data.py --split-mode original --save-split-file   # (re)create splits.csv
-"""
-
 import argparse
 import csv
 import hashlib
@@ -72,9 +35,9 @@ def original_split_of(path: Path) -> str | None:
     return SPLIT_ALIASES.get(path.parent.parent.name.lower())
 
 
-# --------------------------------------------------------------------------
+
 # Mode "file": read the shared split
-# --------------------------------------------------------------------------
+
 def load_split_file(split_file: Path, raw_dir: Path):
     """Read splits.csv -> ({split: [(path, label), ...]}, {path: md5}).
     Stops with an error if any listed image is missing or differs from the group's copy."""
@@ -114,10 +77,8 @@ def load_split_file(split_file: Path, raw_dir: Path):
         )
     return splits, hashes
 
-
-# --------------------------------------------------------------------------
 # Modes "original" / "resplit": build a split from data/raw
-# --------------------------------------------------------------------------
+
 def collect_images(raw_dir: Path):
     """Return (path, class_label, original_split) records, {path: md5} and the
     number of duplicates removed."""
@@ -188,9 +149,9 @@ def save_split_file(splits, hashes, raw_dir: Path, split_file: Path) -> None:
     print(f"Saved the split to {split_file}. Commit it so the whole group uses it.")
 
 
-# --------------------------------------------------------------------------
+
 # Image processing
-# --------------------------------------------------------------------------
+
 def output_name(src: Path) -> str:
     """Unique PNG file name (original split + file stem), because Kaggle's
     train/validation/test folders may reuse the same file names."""

@@ -1,12 +1,12 @@
-"""
-Model architectures for Vegetable Classification on Edge Devices.
 
-Implements:
-1. Model A: Standard CNN with interleaved Conv2D and MaxPooling2D.
-2. Model B: Lightweight CNN using Depthwise Separable Convolutions (<100,000 parameters).
-3. MobileNetV2: Fine-tuned lightweight SOTA baseline.
-4. EfficientNet-B0: Fine-tuned compound-scaled lightweight SOTA baseline.
-"""
+# Model architectures for Vegetable Classification on Edge Devices.
+
+# Implements:
+# 1. Model A: Standard CNN with interleaved Conv2D and MaxPooling2D.
+# 2. Model B: Lightweight CNN using Depthwise Separable Convolutions.
+# 3. MobileNetV2: Fine-tuned lightweight SOTA baseline.
+# 4. EfficientNet-B0: Fine-tuned compound-scaled lightweight SOTA baseline.
+
 
 from typing import Tuple, Dict, Any
 import numpy as np
@@ -19,15 +19,11 @@ def build_model_a(
     input_shape: Tuple[int, int, int] = (64, 64, 3),
     num_classes: int = 15,
 ) -> keras.Model:
-    """
-    Model A: Standard CNN for Edge Classification.
-    Interleaves standard Conv2D layers with Batch Normalization, ReLU activations,
-    and MaxPooling2D layers.
 
-    Hardware justification for activation:
-    - Standard ReLU (f(x) = max(0, x)) is used because it requires only a threshold/clamp
-      instruction without floating-point transcendental exponentials (unlike Sigmoid or Tanh).
-    """
+    # Model A: Standard CNN for Edge Classification.
+    # Interleaves standard Conv2D layers with Batch Normalization, ReLU activations,
+    # and MaxPooling2D layers.
+
     inputs = layers.Input(shape=input_shape, name="input_image")
     # Rescale pixel values from [0, 255] to [0.0, 1.0]
     x = layers.Rescaling(1.0 / 255.0, name="rescaling")(inputs)
@@ -70,19 +66,17 @@ def build_model_b(
     input_shape: Tuple[int, int, int] = (64, 64, 3),
     num_classes: int = 15,
 ) -> keras.Model:
-    """
-    Model B: Ultra-lightweight CNN using Depthwise Separable Convolutions.
-    Strict constraint: Total trainable parameters MUST NOT EXCEED 100,000.
+    
+    # Model B: Ultra-lightweight CNN using Depthwise Separable Convolutions.
+    # Strict constraint: Total trainable parameters MUST NOT EXCEED 100,000.
 
-    Depthwise Separable Convolution decomposes standard convolution into:
-    1. Depthwise convolution: spatial filtering per channel (kernel_size * kernel_size * C_in)
-    2. Pointwise convolution: 1x1 cross-channel combination (1 * 1 * C_in * C_out)
-    This drastically reduces multiply-accumulate (MAC) operations by ~8x-9x for 3x3 kernels.
+    # Depthwise Separable Convolution decomposes standard convolution into:
+    # 1. Depthwise convolution: spatial filtering per channel (kernel_size * kernel_size * C_in)
+    # 2. Pointwise convolution: 1x1 cross-channel combination (1 * 1 * C_in * C_out)
+    # This drastically reduces multiply-accumulate (MAC) operations by ~8x-9x for 3x3 kernels.
 
-    Hardware justification for activation:
-    - ReLU6 (f(x) = min(max(0, x), 6)) is used because it prevents activation overflow,
-      preserving dynamic range for 8-bit fixed-point quantization (INT8) on microcontrollers.
-    """
+    
+  
     inputs = layers.Input(shape=input_shape, name="input_image")
     x = layers.Rescaling(1.0 / 255.0, name="rescaling")(inputs)
 

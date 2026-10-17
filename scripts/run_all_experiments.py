@@ -1,11 +1,11 @@
 """
-Complete End-to-End Experiment Pipeline for EN3150 Assignment 03:
+Complete End-to-End Experiment Pipeline:
 Vegetable Classification with Resource-Constrained CNNs.
 
 Executes:
 1. Data loading and verification from data/processed
 2. Model A (Standard CNN) training for 20 epochs & evaluation
-3. Model B (Lightweight CNN <100k params) training for 20 epochs & evaluation
+3. Model B training for 20 epochs & evaluation
 4. Optimizer Tuning on Model B (Adam vs SGD vs SGD with Momentum)
 5. SOTA Fine-Tuning: MobileNetV2 & EfficientNet-B0
 6. Metric logging, curve plotting, confusion matrices, and comparison tables

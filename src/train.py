@@ -1,10 +1,5 @@
-"""
-Training engine and optimizer tuning experiments for Vegetable Classification.
 
-Supports:
-- Standard 20+ epoch training with callbacks (checkpointing, LR scheduling, logging).
-- Optimizer comparison: Adam vs standard SGD vs SGD with Momentum.
-"""
+# Training engine and optimizer tuning experiments for Vegetable Classification.
 
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
@@ -22,13 +17,7 @@ def get_optimizer(
     learning_rate: float = 1e-3,
     momentum: float = 0.9,
 ) -> keras.optimizers.Optimizer:
-    """
-    Factory for optimizers.
-    Supported:
-    - 'adam': Adaptive Moment Estimation (lr default: 1e-3)
-    - 'sgd': Standard Stochastic Gradient Descent (lr default: 1e-2, momentum=0.0)
-    - 'sgd_momentum': SGD with Nesterov/Classical Momentum (lr default: 1e-2, momentum=0.9)
-    """
+   
     name_clean = name.lower()
     if name_clean == "adam":
         return keras.optimizers.Adam(learning_rate=learning_rate)
@@ -52,12 +41,7 @@ def train_model(
     patience_es: int = 10,
     patience_lr: int = 4,
 ) -> Tuple[keras.callbacks.History, float]:
-    """
-    Train a Keras model with standard callbacks, logging, and epoch timing.
-
-    Returns:
-        (history, avg_time_per_epoch)
-    """
+   
     if optimizer is None:
         optimizer = keras.optimizers.Adam(learning_rate=1e-3)
 
@@ -125,10 +109,7 @@ def run_optimizer_comparison(
     epochs: int = 15,
     results_dir: Optional[Path | str] = None,
 ) -> Dict[str, pd.DataFrame]:
-    """
-    Compare Adam vs Standard SGD vs SGD with Momentum using Model B.
-    Saves and returns training histories.
-    """
+   
     configs = [
         {"name": "Adam", "opt": keras.optimizers.Adam(learning_rate=1e-3), "lr": 0.001},
         {"name": "SGD (Standard)", "opt": keras.optimizers.SGD(learning_rate=1e-2, momentum=0.0), "lr": 0.01},

@@ -1,6 +1,4 @@
-"""
-Utility functions for plotting, table generation, and visualization.
-"""
+# Utility functions for plotting, table generation, and visualization.
 
 from pathlib import Path
 from typing import Dict, List, Optional, Any
