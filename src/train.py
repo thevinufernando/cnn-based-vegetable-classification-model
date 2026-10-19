@@ -4,6 +4,7 @@
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
 import time
+import json
 import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
@@ -99,6 +100,18 @@ def train_model(
     total_time = time.time() - start_time
     epochs_trained = len(history.history["loss"])
     avg_time_per_epoch = total_time / max(epochs_trained, 1)
+
+    if csv_log_path is not None:
+        timing_path = Path(csv_log_path).with_name(
+            Path(csv_log_path).stem + "_timing.json"
+        )
+        timing_data = {
+            "total_training_time_s": total_time,
+            "epochs_trained": epochs_trained,
+            "avg_time_per_epoch_s": avg_time_per_epoch,
+        }
+        with open(timing_path, "w") as f:
+            json.dump(timing_data, f, indent=4)
 
     return history, avg_time_per_epoch
 
