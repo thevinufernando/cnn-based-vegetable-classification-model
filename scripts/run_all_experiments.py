@@ -50,6 +50,18 @@ TABLES_DIR = RESULTS_DIR / "tables"
 LOGS_DIR = RESULTS_DIR / "logs"
 MODELS_DIR = ROOT / "models"
 
+def load_training_time(csv_log_path):
+    timing_path = Path(csv_log_path).with_name(
+        Path(csv_log_path).stem + "_timing.json"
+    )
+
+    if not timing_path.exists():
+        return None
+
+    with open(timing_path, "r") as f:
+        timing_data = json.load(f)
+
+    return timing_data["avg_time_per_epoch_s"]
 
 def main():
     parser = argparse.ArgumentParser(description="Run all CNN vegetable classification experiments.")
