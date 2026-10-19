@@ -146,6 +146,7 @@ def main():
 
         # Evaluate on Test Set
         print("\nEvaluating Model A on Test Set...")
+        model_a = keras.models.load_model(save_model_a_path)
         eval_a = evaluate_model(model_a, test_ds, class_names)
         disk_a = measure_model_disk_size(save_model_a_path)
         latency_a = benchmark_inference_latency(model_a)
@@ -226,6 +227,7 @@ def main():
 
         # Evaluate on Test Set
         print("\nEvaluating Model B on Test Set...")
+        model_b = keras.models.load_model(save_model_b_path)
         eval_b = evaluate_model(model_b, test_ds, class_names)
         disk_b = measure_model_disk_size(save_model_b_path)
         latency_b = benchmark_inference_latency(model_b)
@@ -339,6 +341,7 @@ def main():
                 save_path=FIGURES_DIR / "mobilenetv2_training_curves.png",
             )
 
+        mobilenet = keras.models.load_model(save_mn_path)
         eval_mn = evaluate_model(mobilenet, test_ds, class_names)
         disk_mn = measure_model_disk_size(save_mn_path)
         latency_mn = benchmark_inference_latency(mobilenet)
@@ -400,6 +403,7 @@ def main():
                 save_path=FIGURES_DIR / "efficientnetb0_training_curves.png",
             )
 
+        effnet = keras.models.load_model(save_eff_path)
         eval_eff = evaluate_model(effnet, test_ds, class_names)
         disk_eff = measure_model_disk_size(save_eff_path)
         latency_eff = benchmark_inference_latency(effnet)
