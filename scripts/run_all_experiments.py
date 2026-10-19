@@ -76,6 +76,31 @@ def main():
     parser.add_argument("--only-model", type=str, choices=["a", "b", "sota", "optim"], default=None)
     args = parser.parse_args()
 
+    # In evaluation-only mode, never start training due to missing saved outputs.
+    if args.eval_only:
+        required_files = []
+        if args.only_model in (None, "a"):
+            required_files.append(MODELS_DIR / "model_a_standard.keras")
+        if args.only_model in (None, "b"):
+            required_files.append(MODELS_DIR / "model_b_separable.keras")
+        if not args.skip_optim and args.only_model in (None, "optim"):
+            required_files.extend([
+                LOGS_DIR / "optimizer_adam.csv",
+                LOGS_DIR / "optimizer_sgd_(standard).csv",
+                LOGS_DIR / "optimizer_sgd_with_momentum.csv",
+            ])
+        if not args.skip_sota and args.only_model in (None, "sota"):
+            required_files.extend([
+                MODELS_DIR / "mobilenet_v2.keras",
+                MODELS_DIR / "efficientnet_b0.keras",
+            ])
+        missing_files = [path for path in required_files if not path.is_file()]
+        if missing_files:
+            raise FileNotFoundError(
+                "--eval-only requires existing saved files; training will not start. Missing:\n"
+                + "\n".join(str(path) for path in missing_files)
+            )
+
     # Ensure output directories exist
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
