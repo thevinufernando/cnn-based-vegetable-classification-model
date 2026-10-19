@@ -113,7 +113,7 @@ def main():
             print(f"Loading pre-trained Model A from {save_model_a_path}...")
             model_a = keras.models.load_model(save_model_a_path)
             stats_a = get_model_stats(model_a)
-            avg_time_a = 54.37
+            avg_time_a = load_training_time(csv_log_a)
             if csv_log_a.exists():
                 log_df = pd.read_csv(csv_log_a)
                 plot_training_history(
@@ -161,7 +161,7 @@ def main():
         print(f"Model A Macro Precision: {eval_a['precision_macro']:.4f}")
         print(f"Model A Macro Recall: {eval_a['recall_macro']:.4f}")
         print(f"Model A Disk Size: {disk_a['size_kb']} KB")
-        print(f"Model A Avg Time/Epoch: {avg_time_a:.2f} s")
+        print(f"Model A Avg Time/Epoch: {avg_time_a:.2f} s" if avg_time_a is not None else "Model A Avg Time/Epoch: N/A")
         print(f"Model A Inference Latency: {latency_a['latency_mean_ms']} ms/image")
 
         summary_records.append({
@@ -171,7 +171,7 @@ def main():
             "Trainable Parameters": stats_a["trainable_params"],
             "Disk Size (KB)": disk_a["size_kb"],
             "Disk Size (MB)": disk_a["size_mb"],
-            "Avg Time/Epoch (s)": round(avg_time_a, 2),
+            "Avg Time/Epoch (s)": round(avg_time_a, 2) if avg_time_a is not None else None,
             "Test Accuracy (%)": round(eval_a["test_accuracy"] * 100, 2),
             "Macro Precision (%)": round(eval_a["precision_macro"] * 100, 2),
             "Macro Recall (%)": round(eval_a["recall_macro"] * 100, 2),
@@ -191,7 +191,7 @@ def main():
             print(f"Loading pre-trained Model B from {save_model_b_path}...")
             model_b = keras.models.load_model(save_model_b_path)
             stats_b = get_model_stats(model_b)
-            avg_time_b = 28.60
+            avg_time_b = load_training_time(csv_log_b)
             if csv_log_b.exists():
                 log_df_b = pd.read_csv(csv_log_b)
                 plot_training_history(
@@ -241,7 +241,7 @@ def main():
         print(f"Model B Macro Precision: {eval_b['precision_macro']:.4f}")
         print(f"Model B Macro Recall: {eval_b['recall_macro']:.4f}")
         print(f"Model B Disk Size: {disk_b['size_kb']} KB")
-        print(f"Model B Avg Time/Epoch: {avg_time_b:.2f} s")
+        print(f"Model B Avg Time/Epoch: {avg_time_b:.2f} s" if avg_time_b is not None else "Model B Avg Time/Epoch: N/A")
         print(f"Model B Inference Latency: {latency_b['latency_mean_ms']} ms/image")
 
         summary_records.append({
@@ -251,7 +251,7 @@ def main():
             "Trainable Parameters": stats_b["trainable_params"],
             "Disk Size (KB)": disk_b["size_kb"],
             "Disk Size (MB)": disk_b["size_mb"],
-            "Avg Time/Epoch (s)": round(avg_time_b, 2),
+            "Avg Time/Epoch (s)": round(avg_time_b, 2) if avg_time_b is not None else None,
             "Test Accuracy (%)": round(eval_b["test_accuracy"] * 100, 2),
             "Macro Precision (%)": round(eval_b["precision_macro"] * 100, 2),
             "Macro Recall (%)": round(eval_b["recall_macro"] * 100, 2),
@@ -313,7 +313,7 @@ def main():
             print(f"Loading pre-trained MobileNetV2 from {save_mn_path}...")
             mobilenet = keras.models.load_model(save_mn_path)
             stats_mn = get_model_stats(mobilenet)
-            avg_time_mn = 166.05
+            avg_time_mn = load_training_time(csv_log_mn)
             if csv_log_mn.exists():
                 log_df_mn = pd.read_csv(csv_log_mn)
                 plot_training_history(
@@ -357,7 +357,7 @@ def main():
             "Trainable Parameters": stats_mn["trainable_params"],
             "Disk Size (KB)": disk_mn["size_kb"],
             "Disk Size (MB)": disk_mn["size_mb"],
-            "Avg Time/Epoch (s)": round(avg_time_mn, 2),
+            "Avg Time/Epoch (s)": round(avg_time_mn, 2) if avg_time_mn is not None else None,
             "Test Accuracy (%)": round(eval_mn["test_accuracy"] * 100, 2),
             "Macro Precision (%)": round(eval_mn["precision_macro"] * 100, 2),
             "Macro Recall (%)": round(eval_mn["recall_macro"] * 100, 2),
@@ -374,7 +374,7 @@ def main():
             print(f"Loading pre-trained EfficientNet-B0 from {save_eff_path}...")
             effnet = keras.models.load_model(save_eff_path)
             stats_eff = get_model_stats(effnet)
-            avg_time_eff = 237.16
+            avg_time_eff = load_training_time(csv_log_eff)
             if csv_log_eff.exists():
                 log_df_eff = pd.read_csv(csv_log_eff)
                 plot_training_history(
@@ -418,7 +418,7 @@ def main():
             "Trainable Parameters": stats_eff["trainable_params"],
             "Disk Size (KB)": disk_eff["size_kb"],
             "Disk Size (MB)": disk_eff["size_mb"],
-            "Avg Time/Epoch (s)": round(avg_time_eff, 2),
+            "Avg Time/Epoch (s)": round(avg_time_eff, 2) if avg_time_eff is not None else None,
             "Test Accuracy (%)": round(eval_eff["test_accuracy"] * 100, 2),
             "Macro Precision (%)": round(eval_eff["precision_macro"] * 100, 2),
             "Macro Recall (%)": round(eval_eff["recall_macro"] * 100, 2),
