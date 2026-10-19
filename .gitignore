@@ -1,4 +1,11 @@
 taskdoc/
 data/
+models/
+__pycache__/
+*.pyc
 
 .venv/
+*.aux
+*.log
+*.out
+*.toc
